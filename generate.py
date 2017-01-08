@@ -5,6 +5,84 @@ import shutil
 import urllib
 import docraptor
 
+# Parser from https://github.com/lxml/lxml
+from lxml import etree
+from lxml.html import fromstring, tostring
+
+# Function builds Table of Contents based on an HTML string
+# Returns HTML with adjustments for Table of Contents
+def build_toc(html):
+    new_html = html
+    # First make sure this html has a place for the html
+    if 'id="toc"' not in html:
+        return html
+
+    # Then find all header elements
+    # Create a regex to find any <h1> <h2> <h3>
+    # For each, 
+    # - fetch the title-string and
+    # - construct a parameterized string for the ID
+    # - Check the number following the h and,
+    # - adjust the TOC html accordingly 
+
+    # @todo: remove this, it's just for testing
+    toc = etree.Element("div", id="toc")
+
+    # parsed_html = etree.fromstring(html)
+    event_types = ("start", "end", "start-ns", "end-ns")
+    parser = etree.XMLPullParser(event_types)
+    events = parser.read_events()
+    parser.feed(html)
+    # Increases as we get deeper, helps construct TOC
+    header_level = 0
+    current_list = toc # append list items to main div
+    last_item = toc
+
+    for action, obj in events:
+        classes = obj.get('class')
+        if classes and any(x in classes for x in ['title', 'no-toc']):
+            continue
+        if action == 'start':
+            if obj.tag == 'h1':
+                if header_level > 1:
+                    # Need to return to top level
+                    current_list = toc
+                header_level = 1
+            elif obj.tag == 'h2':
+                if header_level < 2:
+                    # Add new level to the TOC
+                    current_list = etree.SubElement(last_item, "ol")
+                elif header_level > 2:
+                    # Need to close current level and go up
+                    current_list = current_list.getparent().getparent()
+                header_level = 2
+            elif obj.tag == 'h3':
+                if header_level < 3:
+                    # Add new level to the TOC
+                    current_list = etree.SubElement(last_item, "ol")
+                elif header_level > 3:
+                    # Need to close current level and go up
+                    current_list = current_list.getparent().getparent()
+                header_level = 3
+            # For any header level, we append to the header list position
+            if obj.tag in ('h1', 'h2', 'h3'):
+                header_text = obj.text.strip()
+                # Parameterize text AND CHANGE BELOW
+                param_header = header_text.lower().replace(' ', '-');
+                obj.set("id", param_header)
+                # Append li a with href and text to the TOC
+                list_item = etree.SubElement(current_list, "li")
+                anchor = etree.SubElement(
+                    list_item, "a", href="#%s" % param_header)
+                anchor.text = header_text
+                last_item = list_item
+
+    root = parser.close()
+    new_html = tostring(root).replace('<div id="toc"></div>', tostring(toc))
+    # print(new_html)
+    return new_html
+
+
 docraptor.configuration.username = "ONweg0Cg51Sb6erdp9"
 doc_api = docraptor.DocApi()
 
@@ -34,10 +112,17 @@ if '--toc' in sys.argv:
 
 # Loops through all files in the "inbox" folder
 for html_file in os.listdir("inbox"):
+
     # Determine if file is the correct format
     if html_file.split('.')[1] == 'html':
         filename = html_file.split('.')[0]
         html = urllib.urlopen("inbox/{}".format(html_file)).read()
+
+        ##########################
+
+        html = build_toc(html)
+
+        #########################
 
         # Check if style embedder is checked
         if should_use_default_styles:

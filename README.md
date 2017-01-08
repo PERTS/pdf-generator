@@ -13,6 +13,12 @@ python generate.py
 
 PDF files will be generated in a `outbox` subdirectory.
 
+## Setup
+
+```
+sudo pip install lxml
+```
+
 ## Production v. Testing
 
 By default PDF files are generated in 'testing' mode with DocRaptor. These are
